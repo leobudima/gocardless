@@ -10,8 +10,9 @@ var pRequest = function (options) {
     });
 };
 
-function buildOptions(token, endPoint, path, method, body = {}) {
-    return {
+function buildOptions(token, endPoint, path, method, body = {}, idempotencyKey = null) {
+    
+    var params = {
         uri: endPoint + path,
         headers: {
             Authorization: `Bearer ${token}`,
@@ -23,6 +24,12 @@ function buildOptions(token, endPoint, path, method, body = {}) {
         method,
         json: true
     };
+    
+    if (idempotencyKey) {
+        params.headers['Idempotency-Key'] = idempotencyKey;
+    }
+        
+    return params;
 }
 
 function goCardlessRedirectRequest(options) {
@@ -62,8 +69,8 @@ export default class GoCardless {
      * @param  {mixed} body
      * @return {Promise<response>}
      */
-    request(method, path, body = null) {
-        const options = buildOptions(this.token, this.endPoint, path, method, body);
+    request(method, path, body = null, idempotencyKey) {
+        const options = buildOptions(this.token, this.endPoint, path, method, body, idempotencyKey);
         return goCardlessRequest(options);
     }
 
@@ -108,23 +115,28 @@ export default class GoCardless {
      * @param metadata any data up to 3 pairs of key-values
      * @param internalReference your own internal reference
      */
-    createPayment(mandateID, amount, currency = 'EUR', chargeDate = null, description = null, metadata = null, internalReference = null) {
+    createPayment(mandateID, amount, currency = 'EUR', chargeDate = null, description = null, metadata = null, internalReference = null, idempotencyKey = null) {
         const body = {
             payments: {
                 amount,
                 currency,
                 metadata,
                 charge_date: chargeDate && yyyymmdd(chargeDate),
-                reference: internalReference || '',
                 description: description || '',
                 links: {
                     mandate: mandateID
                 }
             }
         };
+        
+        // only send if provided, since GC returns an "invalid_api_usage" for non Plus or Pro packages even if sent empty
+        if (internalReference) {
+            body.payments.reference = internalReference;
+        }
+        
         const path = '/payments';
         const method = 'POST';
-        const options = buildOptions(this.token, this.endPoint, path, method, body);
+        const options = buildOptions(this.token, this.endPoint, path, method, body, idempotencyKey);
         return goCardlessRequest(options);
     }
 
